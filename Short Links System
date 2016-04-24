@@ -1,0 +1,70 @@
+Question 3) We’d like to make a system to create ‘short links’ to specific urls on HotPads (much like http://bit.ly.)  Given the input url of http://hotpads.com/apartments/2000­Post­San­Francisco­CA­94115­­e5jk50kcsm2q, the system would give us a link like http://hotpads.com/r/a7g1hj0 (using whatever identification mechanism you’d like) that we could send to users when space is constrained. The system should be able to keep track of analytics related to each individual short link ­ how many times it has been clicked and information about who clicked it, and it should be fast enough to handle reasonably high traffic loads (500k users per day) and the creation of several million new short links per week.
+  
+  Your task is to provide an overview of the system architecture, including the data model, along with pseudo­code of the important algorithms and pieces of the system.
+
+
+Solution:
+
+System Design for Short Links system
+
+* Use cases:
+  -	URL Shortening
+  -	Custom URL
+  -	High availibility of the system (to handle high traffic loads - 500K users per day)
+  -	Redirection purposes
+
+
+* Scope (Math):
+  -	New URLS for shortening per week : 10 million
+  -	Requests per second : 200+
+  -	500 bytes per URL
+  -	total 6billion URLs in 5years
+  -	approx 3TBs (500bytes * 6billion) of storage for all the URLs (in 5years)
+  -	6 bytes per hash (the urls will be hashed and an identifier related to that hash will be returned to the user)
+  -	approx 36GB (6billion * 6bytes) of storage for all the hashes
+  -	New data written per second (200 * 500bytes): approx 100K
+
+
+* Abstract Design:
+  1. Application Service Layer (this layer will be used to serve the requests)
+    -	Shortening service
+    -	Redirection service (for future)
+
+  2. Data Storage Layer (keeps track of hash=>URL mapping)
+    -	This layer will act like a big hash table that will store new mappings and will retrieve a value given a specified key.
+
+
+* Hashing Algo:
+  -	Add some random salt value to the original URL. 
+  -	Encrypt the new URL using some encryption algorithms. We can use md5 in this case.
+  -	Convert the encrypted url to base 62 (for a-z, A-Z, 0-9)
+  -	Return the first 6bytes of the converted url to the user and store it in the database.
+
+  ** hashed_url = convert_to_base_62(md5(original_url + random_salt))[:6]
+
+
+* Scalable design:
+  1. Application Service layer:
+    -	We can start with one machine (web server)
+    -	Measure much load can it take. (do a load test)
+    -	Add load balancers and a cluster of machines over time to deal with spikey traffic and distribute load to increase availability.
+
+  2. Data storage layer:
+    -	There will be billions of objects. Each object is fairly small (approx <1K).
+    -	There are no relationships between the objects.
+  
+    * Use MySQL for database
+      -	It is widely used and a mature technology.
+      -	Clear scaling paradigms (sharding, master/slave replication etc.)
+      -	Index lookups are very fast.
+
+    * Database schema:
+      -	Only one table is needed to maintain all the records. The table name will be 'mappings'.
+
+        mappings
+        o	hash : varchar(6)
+        o	original_url : varchar(512)
+      
+      -	Create a unique index on the hash field. We want to hold it in the memory to speedup lookups.
+      -	Have multiple MySQL database machines for vertical scaling and redundancy purpose. (for failure tolerance)
+  
